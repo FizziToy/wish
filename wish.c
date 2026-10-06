@@ -168,6 +168,48 @@ void execute_command(char **args, char **paths, int path_count)
     free(executable);
 }
 
+void run_shell(FILE *input, int interactive, char **paths, int *path_count)
+{
+    char *line = NULL;
+    size_t line_capacity = 0;
+    char *args[MAX_ARGS];
+
+    while (1)
+    {
+        if (interactive)
+        {
+            printf("wish> ");
+            fflush(stdout);
+        }
+
+        if (getline(&line, &line_capacity, input) == -1)
+        {
+            free(line);
+            return;
+        }
+
+        int arg_count = parse_command(line, args, MAX_ARGS);
+
+        if (arg_count < 0)
+        {
+            print_error();
+            continue;
+        }
+
+        if (arg_count == 0)
+        {
+            continue;
+        }
+
+        if (execute_builtin(args, arg_count, paths, path_count))
+        {
+            continue;
+        }
+
+        execute_command(args, paths, *path_count);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     if (argc > 2)
@@ -178,9 +220,6 @@ int main(int argc, char *argv[])
 
     (void)argv;
 
-    char *line = NULL;
-    size_t line_capacity = 0;
-    char *args[MAX_ARGS];
     char *paths[MAX_PATHS];
     int path_count = 0;
 
@@ -189,38 +228,31 @@ int main(int argc, char *argv[])
     if (paths[0] == NULL)
     {
         print_error();
-        free(line);
         return 1;
     }
 
     path_count = 1;
-    while (1)
+
+    if (argc == 1)
     {
-        printf("wish> ");
-        fflush(stdout);
-
-        if (getline(&line, &line_capacity, stdin) == -1)
-        {
-	    clear_paths(paths, &path_count);
-            free(line);
-            exit(0);
-        }
-	int arg_count = parse_command(line, args, MAX_ARGS);
-
-	if (arg_count < 0)
-	{
-    	    print_error();
-    	    continue;
-	}
-
-	if (arg_count == 0)
-	{
-    	    continue;
-	}
-	if (execute_builtin(args, arg_count, paths, &path_count))
-	{
-    	    continue;
-	}
-	execute_command(args, paths, path_count);
+        run_shell(stdin, 1, paths, &path_count);
     }
+    else
+    {
+        FILE *batch_file = fopen(argv[1], "r");
+
+        if (batch_file == NULL)
+        {
+            print_error();
+            clear_paths(paths, &path_count);
+            return 1;
+        }
+
+        run_shell(batch_file, 0, paths, &path_count);
+        fclose(batch_file);
+    }
+
+    clear_paths(paths, &path_count);
+
+    return 0;
 }
