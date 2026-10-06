@@ -74,3 +74,7 @@ wish> echo hello > output.txt
 The implementation passes all **22/22 official OSTEP Shell tests**.
 
 ![OSTEP test results](screenshots/tests.png)
+
+## AI Assistance
+
+ChatGPT model GPT-5.6 Sol. was used as an AI assistant during development.
