@@ -5,6 +5,8 @@
 #include <sys/wait.h>
 
 #define MAX_ARGS 100
+#define MAX_PATHS 100
+
 void print_error(void)
 {
     char error_message[30] = "An error has occurred\n";
@@ -37,32 +39,106 @@ int parse_command(char *line, char **args, int max_args)
     return arg_count;
 }
 
-char *find_executable(char *command)
+char *find_executable(char *command, char **paths, int path_count)
 {
-    char *path = "/bin";
-    size_t length = strlen(path) + strlen(command) + 2;
-
-    char *full_path = malloc(length);
-
-    if (full_path == NULL)
+    for (int i = 0; i < path_count; i++)
     {
-        return NULL;
-    }
+        size_t length = strlen(paths[i]) + strlen(command) + 2;
 
-    snprintf(full_path, length, "%s/%s", path, command);
+        char *full_path = malloc(length);
 
-    if (access(full_path, X_OK) != 0)
-    {
+        if (full_path == NULL)
+        {
+            return NULL;
+        }
+
+        snprintf(full_path, length, "%s/%s", paths[i], command);
+
+        if (access(full_path, X_OK) == 0)
+        {
+            return full_path;
+        }
+
         free(full_path);
-        return NULL;
     }
 
-    return full_path;
+    return NULL;
 }
 
-void execute_command(char **args)
+void clear_paths(char **paths, int *path_count)
 {
-    char *executable = find_executable(args[0]);
+    for (int i = 0; i < *path_count; i++)
+    {
+        free(paths[i]);
+        paths[i] = NULL;
+    }
+
+    *path_count = 0;
+}
+
+int execute_builtin(char **args, int arg_count, char **paths, int *path_count)
+{
+    if (strcmp(args[0], "exit") == 0)
+    {
+        if (arg_count != 1)
+        {
+            print_error();
+            return 1;
+        }
+	clear_paths(paths, path_count);
+        exit(0);
+    }
+
+    if (strcmp(args[0], "cd") == 0)
+    {
+        if (arg_count != 2)
+    	{
+            print_error();
+            return 1;
+        }
+
+    	if (chdir(args[1]) != 0)
+    	{
+            print_error();
+    	}
+
+    	return 1;
+    }
+
+    if (strcmp(args[0], "path") == 0)
+    {
+        clear_paths(paths, path_count);
+
+        for (int i = 1; i < arg_count; i++)
+        {
+            if (*path_count >= MAX_PATHS)
+            {
+                print_error();
+                return 1;
+            }
+
+            char *new_path = strdup(args[i]);
+
+            if (new_path == NULL)
+            {
+                print_error();
+                clear_paths(paths, path_count);
+                return 1;
+            }
+
+            paths[*path_count] = new_path;
+            (*path_count)++;
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
+
+void execute_command(char **args, char **paths, int path_count)
+{
+    char *executable = find_executable(args[0], paths, path_count);
 
     if (executable == NULL)
     {
@@ -105,7 +181,19 @@ int main(int argc, char *argv[])
     char *line = NULL;
     size_t line_capacity = 0;
     char *args[MAX_ARGS];
+    char *paths[MAX_PATHS];
+    int path_count = 0;
 
+    paths[0] = strdup("/bin");
+
+    if (paths[0] == NULL)
+    {
+        print_error();
+        free(line);
+        return 1;
+    }
+
+    path_count = 1;
     while (1)
     {
         printf("wish> ");
@@ -113,6 +201,7 @@ int main(int argc, char *argv[])
 
         if (getline(&line, &line_capacity, stdin) == -1)
         {
+	    clear_paths(paths, &path_count);
             free(line);
             exit(0);
         }
@@ -128,7 +217,10 @@ int main(int argc, char *argv[])
 	{
     	    continue;
 	}
-
-	execute_command(args);
+	if (execute_builtin(args, arg_count, paths, &path_count))
+	{
+    	    continue;
+	}
+	execute_command(args, paths, path_count);
     }
 }
