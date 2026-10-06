@@ -10,6 +10,7 @@ void print_error(void)
     char error_message[30] = "An error has occurred\n";
     write(STDERR_FILENO, error_message, strlen(error_message));
 }
+
 int parse_command(char *line, char **args, int max_args)
 {
     int arg_count = 0;
@@ -35,25 +36,60 @@ int parse_command(char *line, char **args, int max_args)
 
     return arg_count;
 }
+
+char *find_executable(char *command)
+{
+    char *path = "/bin";
+    size_t length = strlen(path) + strlen(command) + 2;
+
+    char *full_path = malloc(length);
+
+    if (full_path == NULL)
+    {
+        return NULL;
+    }
+
+    snprintf(full_path, length, "%s/%s", path, command);
+
+    if (access(full_path, X_OK) != 0)
+    {
+        free(full_path);
+        return NULL;
+    }
+
+    return full_path;
+}
+
 void execute_command(char **args)
 {
+    char *executable = find_executable(args[0]);
+
+    if (executable == NULL)
+    {
+        print_error();
+        return;
+    }
+
     pid_t pid = fork();
 
     if (pid < 0)
     {
+        free(executable);
         print_error();
         return;
     }
 
     if (pid == 0)
     {
-        execv("/bin/ls", args);
+        execv(executable, args);
 
         print_error();
+        free(executable);
         exit(1);
     }
 
     waitpid(pid, NULL, 0);
+    free(executable);
 }
 
 int main(int argc, char *argv[])
